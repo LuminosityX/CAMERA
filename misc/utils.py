@@ -8,7 +8,7 @@ import random
 
 def print_options(args):
     print("")
-    print("----- options -----".center(120, '-'))
+    print("----- options -----".center(120, '-'))          # String.center(number, str)
     args = vars(args)
     string = ''
     for i, (k, v) in enumerate(sorted(args.items())):
