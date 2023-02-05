@@ -13,8 +13,8 @@ import numpy as np
 import time
 import pickle
 
-def convert_to_feature(raw, seq_length, tokenizer):
-    line = tokenization.convert_to_unicode(raw)
+def convert_to_feature(raw, seq_length, tokenizer):       # seq_length = 32
+    line = tokenization.convert_to_unicode(raw)           # 转换一个格式，这里有点不太明白???
     tokens_a = tokenizer.tokenize(line)
     # Modifies `tokens_a` in place so that the total
     # length is less than the specified length.
@@ -30,16 +30,16 @@ def convert_to_feature(raw, seq_length, tokenizer):
         tokens.append(token)
         input_type_ids.append(0)
     tokens.append("[SEP]")
-    input_type_ids.append(0)
+    input_type_ids.append(0)                             
 
     input_ids = tokenizer.convert_tokens_to_ids(tokens)
 
     # The mask has 1 for real tokens and 0 for padding tokens. Only real
     # tokens are attended to.
-    input_mask = [1] * len(input_ids)
+    input_mask = [1] * len(input_ids)                      # mask = 1 means has word
 
     # Zero-pad up to the sequence length.
-    while len(input_ids) < seq_length:
+    while len(input_ids) < seq_length:                     # 不足的用0填充
         input_ids.append(0)
         input_mask.append(0)
         input_type_ids.append(0)
@@ -84,9 +84,9 @@ class PrecompDataset(data.Dataset):
         if data_split == 'dev':
             self.length = 5000
 
-        self.max_words = opt.max_words  # for BERT
-        self.tokenizer = tokenization.FullTokenizer(
-            vocab_file=opt.vocab_file, do_lower_case=opt.do_lower_case)
+        self.max_words = opt.max_words  # for BERT  
+        self.tokenizer = tokenization.FullTokenizer(                         # FullTokenizer 包含 BasicTokenizer and WordpieceTokenizer
+            vocab_file=opt.vocab_file, do_lower_case=opt.do_lower_case)      # do_lower_case = True
 
 
     def __getitem__(self, index):
@@ -135,7 +135,7 @@ def collate_fn(data):
     lengths = [torch.sum(cap) for cap in input_mask]
     input_ids = torch.stack(input_ids, 0)
     input_mask = torch.stack(input_mask, 0)
-    input_type_ids = torch.stack(input_type_ids, 0)
+    input_type_ids = torch.stack(input_type_ids, 0)           # 因为都是32长度，所以可以stack
     
     ids = np.array(ids)
 
