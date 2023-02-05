@@ -18,7 +18,7 @@ from models import AGSA
 def freeze_layers(model):
     for child in model.children():
         for param in child.parameters():
-            param.requires_grad = False
+            param.requires_grad = False                            # https://www.jianshu.com/p/a4c745b6ea9b  可以得知.children不一定需要
 
 def l2norm(X, dim=1):
     """L2-normalize columns of X
@@ -30,7 +30,7 @@ def l2norm(X, dim=1):
 class TextEncoder(nn.Module):
     """
     """
-    def __init__(self, cfg_file, init_ckpt, embed_size, head, drop=0.0):
+    def __init__(self, cfg_file, init_ckpt, embed_size, head, drop=0.0): # 2048 64
         super(TextEncoder, self).__init__()
         bert_config = BertConfig.from_json_file(cfg_file)
         self.bert = BertModel(bert_config)
@@ -41,7 +41,7 @@ class TextEncoder(nn.Module):
         self.mapping = nn.Linear(bert_config.hidden_size, embed_size)
         self.agsa = AGSA(1, embed_size, h=head, is_share=False, drop=drop)
         # MLP
-        hidden_size = embed_size
+        hidden_size = embed_size                                    # 2048
         self.fc1 = nn.Linear(embed_size, hidden_size)
         self.fc2 = nn.Linear(hidden_size, embed_size)
         self.bn = nn.BatchNorm1d(embed_size)
@@ -52,12 +52,12 @@ class TextEncoder(nn.Module):
         x = self.mapping(all_encoder_layers[-1])    #(bs, token_num, final_dim)
         bs, token_num = x.size()[:2]
         agsa_emb = self.agsa(x)
-        x = self.fc2(self.dropout(F.relu(self.fc1(agsa_emb))))
-        x = (self.bn(x.view(bs*token_num, -1))).view(bs, token_num, -1)  
-        x = agsa_emb + self.dropout(x)    # context-enhanced word embeddings
+        x = self.fc2(self.dropout(F.relu(self.fc1(agsa_emb))))               
+        x = (self.bn(x.view(bs*token_num, -1))).view(bs, token_num, -1)            # 前馈神经网络
+        x = agsa_emb + self.dropout(x)    # context-enhanced word embeddings       完整度过一个Trasnformer块
 
-        cap_emb = torch.mean(x, 1)
-        return F.normalize(cap_emb, p=2, dim=-1)
+        cap_emb = torch.mean(x, 1)            # [bs, dim]
+        return F.normalize(cap_emb, p=2, dim=-1)     
 
     def load_state_dict(self, state_dict):
         """Copies parameters. overwritting the default one to
