@@ -10,7 +10,7 @@ def clones(module, N):
     return nn.ModuleList([copy.deepcopy(module) for _ in range(N)])
 
 class GatedQueryAttLayer(nn.Module):
-    def __init__(self, embed_size, h, is_share, drop=None):
+    def __init__(self, embed_size, h, is_share, drop=None):          # 2048 64 False 0.0
         super(GatedQueryAttLayer, self).__init__()
         self.is_share = is_share
         self.h = h
@@ -27,7 +27,7 @@ class GatedQueryAttLayer(nn.Module):
 
         self.fc_q = nn.Linear(self.d_k, self.d_k)
         self.fc_k = nn.Linear(self.d_k, self.d_k)
-        self.fc_g = nn.Linear(self.d_k, self.d_k*2)
+        self.fc_g = nn.Linear(self.d_k, self.d_k*2)                # gate操作中对于QK要产生两个mask
 
     def forward(self, inp, mask=None):
         nbatches = inp.size(0)
@@ -49,11 +49,11 @@ class GatedQueryAttLayer(nn.Module):
         x = torch.matmul(p_attn, value) 
         x = x.transpose(1, 2).contiguous() \
              .view(nbatches, -1, self.h * self.d_k)
-        return x
+        return x        # [bs, n_regions/n_words, 2048]
 
 class AGSA(nn.Module):
     ''' Adaptive Gating Self-Attention module '''
-    def __init__(self, num_layers, embed_size, h=1, is_share=False, drop=None):
+    def __init__(self, num_layers, embed_size, h=1, is_share=False, drop=None):       # 1. 2048, 64, Flase, 0.0
         super(AGSA, self).__init__()
         self.num_layers = num_layers
         self.bns = clones(nn.BatchNorm1d(embed_size), num_layers)
@@ -64,7 +64,7 @@ class AGSA(nn.Module):
         self.att_layers = clones(GatedQueryAttLayer(embed_size, h, is_share, drop=drop), num_layers)
 
     def forward(self, rgn_emb, pos_emb=None, mask=None):
-        ''' imb_emb -- (bs, num_r, dim), pos_emb -- (bs, num_r, num_r, dim) '''
+        ''' imb_emb -- (bs, num_r, dim), pos_emb -- (bs, num_r, num_r, dim)  这里pos_emb应该跟img_emb一样 '''
         bs, num_r, emb_dim = rgn_emb.size()
         if pos_emb is None:
             x = rgn_emb
@@ -72,12 +72,12 @@ class AGSA(nn.Module):
             x = rgn_emb * pos_emb
         
         # 1st layer
-        x = self.att_layers[0](x, mask)    #(bs, r, d)
+        x = self.att_layers[0](x, mask)    #(bs, r, d)     mask = None
         x = (self.bns[0](x.view(bs*num_r, -1))).view(bs, num_r, -1) 
-        agsa_emb = rgn_emb + self.dropout[0](x)
+        agsa_emb = rgn_emb + self.dropout[0](x) # residule
 
         # 2nd~num_layers
-        for i in range(self.num_layers - 1):
+        for i in range(self.num_layers - 1):    # Here num_layers = 1
             x = self.att_layers[i+1](agsa_emb, mask) #(bs, r, d)
             x = (self.bns[i+1](x.view(bs*num_r, -1))).view(bs, num_r, -1) 
             agsa_emb = agsa_emb + self.dropout[i+1](x)
