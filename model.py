@@ -18,6 +18,64 @@ from models import Summarization
 from models import MultiViewMatching
 from loss import TripletLoss, DiversityRegularization
 
+#########----PositionEncoder----##############
+'''
+def absoluteEncode(boxes, imgs_wh):
+    # boxes -- (bs, num_regions, 4), imgs_wh -- (bs, 2) 
+    x, y, w, h = boxes[:, :, 0], boxes[:, :, 1], boxes[:, :, 2] - boxes[:, :, 0], boxes[:, :, 3] - boxes[:, :, 1]
+    expand_wh = torch.cat([imgs_wh, imgs_wh], dim=1).unsqueeze(dim=1)    #(bs, 1, 4)
+    ratio_wh = (w / h).unsqueeze(dim=-1)  #(bs, num_r, 1)
+    ratio_area = (w * h) / (imgs_wh[:, 0] * imgs_wh[:, 1]).unsqueeze(-1) #(bs, num_r)
+    ratio_area = ratio_area.unsqueeze(-1) #(bs, num_r, 1)
+    boxes = torch.stack([x, y, w, h], dim=2)
+    boxes = boxes / expand_wh   #(bs, num_r, 4)
+    res = torch.cat([boxes, ratio_wh, ratio_area], dim=-1)  #(bs, num_r, 6)
+    return res
+
+class PositionEncoder(nn.Module):
+    # Relative position Encoder
+    
+    def __init__(self, embed_dim, posi_dim=6):             # 2048
+        super(PositionEncoder, self).__init__()
+        self.proj = nn.Linear(posi_dim, embed_dim)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, boxes, imgs_wh):
+        # boxes -- (bs, num_regions, 4), imgs_wh -- (bs, num_regions, 2)
+        bs, num_regions = boxes.size()[:2]
+        posi = absoluteEncode(boxes, imgs_wh)   #(bs, num_r, 6)
+
+        x = self.proj(posi)                     #(bs, num_r, 2048)
+        x = self.sigmoid(x)
+        return x
+'''
+##############################################
+
+#########----Summarization----##############
+'''
+class Summarization(nn.Module):
+    # Multi-View Summarization Module 
+    def __init__(self, embed_size, smry_k):   # 2048 12
+        super(Summarization, self).__init__()       
+        # dilation conv
+        out_c = [256, 128, 128, 128, 128, 128, 128]   # all plus is 1024 
+        k_size = [1, 3, 3, 3, 5, 5, 5]
+        dila = [1, 1, 2, 3, 1, 2, 3]
+        pads = [0, 1, 2, 3, 2, 4, 6]     # 填充0的层数，刚好使得得到的所有kenel的结果的长度都依旧是36
+        convs_dilate = [nn.Conv1d(embed_size, out_c[i], k_size[i], dilation=dila[i], padding=pads[i]) \    # 虽然是一维卷积，但其实还是在2维tensor上进行的，只是这里将tensor当成了词向量，第一个参数就是词向量维度。所以其实真正的kenel size是该维度乘以相关大小
+                        for i in range(len(out_c))]
+        self.convs_dilate = nn.ModuleList(convs_dilate)
+        self.convs_fc = nn.Linear(1024, smry_k)
+
+    def forward(self, rgn_emb):
+        x = rgn_emb.transpose(1, 2)    #(bs, dim, num_r)                  # 要求输入的维度是这样
+        x = [F.relu(conv(x)) for conv in self.convs_dilate]
+        x = torch.cat(x, dim=1) #(bs, 1024, num_r)
+        x = x.transpose(1, 2)   #(bs, num_r, 1024)
+        smry_mat = self.convs_fc(x)    #(bs, num_r, k)                    # 得到了K个view的权重
+        return smry_mat
+'''
+##############################################
 
 def l2norm(X, dim=1):
     """L2-normalize columns of X
@@ -50,7 +108,7 @@ class EncoderImagePrecompSelfAttn(nn.Module):
         """Extract image feature vectors."""
         fc_img_emd = self.fc(images)
         fc_img_emd = l2norm(fc_img_emd)  #(bs, num_regions, dim)
-        posi_emb = self.position_enc(boxes, imgs_wh)    #(bs, num_regions, num_regions, dim)
+        posi_emb = self.position_enc(boxes, imgs_wh)    #(bs, num_regions, num_regions, dim) 这里应该是[b, 36, 2048]
 
         # Adaptive Gating Self-Attention
         self_att_emb = self.agsa(fc_img_emd, posi_emb)    #(bs, num_regions, dim)
@@ -73,16 +131,46 @@ class EncoderImagePrecompSelfAttn(nn.Module):
                 new_state[name] = param
 
         super(EncoderImagePrecompSelfAttn, self).load_state_dict(new_state)
+        
+#########----MultiViewMatching----##############
+'''
+class MultiViewMatching(nn.Module):
+    def __init__(self, ):
+        super(MultiViewMatching, self).__init__()
 
+    def forward(self, imgs, caps):
+        # caps -- (num_caps, dim), imgs -- (num_imgs, r, dim)
+        num_caps  = caps.size(0)
+        num_imgs, r = imgs.size()[:2]
+        
+        if num_caps == num_imgs:                             # train 与 test 会有区别
+            scores = torch.matmul(imgs, caps.t()) #(num_imgs, r, num_caps)
+            scores = scores.max(1)[0]  #(num_imgs, num_caps)
+        else:                                                # test 会出现的问题
+            scores = []
+            score_ids = []
+            for i in range(num_caps):
+                cur_cap = caps[i].unsqueeze(0).unsqueeze(0)  #(1, 1, dim)
+                cur_cap = cur_cap.expand(num_imgs, -1, -1)   #(num_imgs, 1, dim)
+                cur_score = torch.matmul(cur_cap, imgs.transpose(-2, -1)).squeeze()    #(num_imgs, r)
+                cur_score = cur_score.max(1, keepdim=True)[0]   #(num_imgs, 1)
+                scores.append(cur_score)
+            scores = torch.cat(scores, dim=1)   #(num_imgs, num_caps)
+
+        return scores  
+'''
+##############################################
+
+   
 class CAMERA(object):
     def __init__(self, opt):
         # Build Models
         self.opt = opt
         self.grad_clip = opt.grad_clip
-        self.img_enc = EncoderImagePrecompSelfAttn(opt.img_dim, opt.embed_size, \
-                                    opt.head, opt.smry_k, drop=opt.drop)
+        self.img_enc = EncoderImagePrecompSelfAttn(opt.img_dim, opt.embed_size, \       # 2048 2048
+                                    opt.head, opt.smry_k, drop=opt.drop)                # 64 12
         self.txt_enc = TextEncoder(opt.bert_config_file, opt.init_checkpoint, \
-                                    opt.embed_size, opt.head, drop=opt.drop)
+                                    opt.embed_size, opt.head, drop=opt.drop)            # 2048 64
 
         if torch.cuda.is_available():
             self.img_enc.cuda()
@@ -137,8 +225,8 @@ class CAMERA(object):
             token_type_ids = token_type_ids.cuda()
 
         # Forward
-        cap_emb = self.txt_enc(input_ids, attention_mask, token_type_ids, lengths)
-        img_emb, smry_mat = self.img_enc(images, boxes, imgs_wh)
+        cap_emb = self.txt_enc(input_ids, attention_mask, token_type_ids, lengths) # [bs, dim]
+        img_emb, smry_mat = self.img_enc(images, boxes, imgs_wh)                   # [bs, k/12, dim]
 
         return img_emb, cap_emb, smry_mat
 
