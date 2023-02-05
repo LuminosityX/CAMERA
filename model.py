@@ -114,7 +114,7 @@ class EncoderImagePrecompSelfAttn(nn.Module):
         self_att_emb = self.agsa(fc_img_emd, posi_emb)    #(bs, num_regions, dim)
         self_att_emb = l2norm(self_att_emb)
         # Multi-View Summarization
-        smry_mat = self.mvs(self_att_emb)
+        smry_mat = self.mvs(self_att_emb)                 # 得到的view权重
         L = F.softmax(smry_mat, dim=1)
         img_emb_mat = torch.matmul(L.transpose(1, 2), self_att_emb) #(bs, k, dim)
 
@@ -228,7 +228,7 @@ class CAMERA(object):
         cap_emb = self.txt_enc(input_ids, attention_mask, token_type_ids, lengths) # [bs, dim]
         img_emb, smry_mat = self.img_enc(images, boxes, imgs_wh)                   # [bs, k/12, dim]
 
-        return img_emb, cap_emb, smry_mat
+        return img_emb, cap_emb, smry_mat                                          # smry_mat 未softmax前的权重
 
 
     def train_emb(self, epoch, batch_data, *args):
