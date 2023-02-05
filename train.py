@@ -21,7 +21,7 @@ def main():
     parser.add_argument('--margin', default=0.2, type=float, help='Rank loss margin.')
     parser.add_argument('--num_epochs', default=30, type=int, help='Number of training epochs.')
     parser.add_argument('--batch_size', default=128, type=int, help='Size of a training mini-batch.')
-    parser.add_argument('--embed_size', default=2048, type=int, help='Dimensionality of the joint embedding.')
+    parser.add_argument('--embed_size', default=2048, type=int, help='Dimensionality of the joint embedding.')        # 2048
     parser.add_argument('--grad_clip', default=2., type=float, help='Gradient clipping threshold.')
     parser.add_argument('--learning_rate', default=.0001, type=float, help='Initial learning rate.')
     parser.add_argument('--lr_update', default=10, type=int, help='Number of epochs to update the learning rate.')
@@ -34,7 +34,7 @@ def main():
     parser.add_argument('--max_violation', action='store_true', help='Use max instead of sum in the rank loss.')
     parser.add_argument('--img_dim', default=2048, type=int, help='Dimensionality of the image embedding.')
     parser.add_argument("--bert_path", default='./', type=str, help="The BERT model path.")
-    parser.add_argument('--max_words', default=32, type=int, help='maximum number of words in a sentence.')
+    parser.add_argument('--max_words', default=32, type=int, help='maximum number of words in a sentence.')         # fixed length
     parser.add_argument('--drop', type=float, default=0.0, help='Dropout')
     parser.add_argument('--head', type=int, default=64, help='Number of heads in AGSA')
     parser.add_argument('--smry_k', type=int, default=12, help='Number of views in summarization module')
@@ -76,7 +76,7 @@ def main():
 
     # Train the Model
     best_rsum = 0
-    best_r1 = 0
+    best_r1 = 0                  # 多了个单方向的r1,但判断is_best时不使用
 
     for epoch in range(opt.num_epochs):
         adjust_learning_rate(opt, model.optimizer, epoch)
@@ -144,7 +144,7 @@ def train(opt, train_loader, model, epoch, val_loader, best_rsum, best_r1):
         tb_logger.log_value('step', i, step=model.Eiters)
         tb_logger.log_value('batch_time', batch_time.val, step=model.Eiters)
         tb_logger.log_value('data_time', data_time.val, step=model.Eiters)
-        model.logger.tb_log(tb_logger, step=model.Eiters)
+        model.logger.tb_log(tb_logger, step=model.Eiters)                # 在model.train_emb中model的logger会记录一些，这里将那些记录到tensorboard
 
         # validate at every val_step
         if model.Eiters % opt.val_step == 0:
